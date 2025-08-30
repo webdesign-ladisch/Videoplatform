@@ -17,9 +17,11 @@ function Sidebar() {
         <div className="storage">Speicher: {usage}</div>
         <NavLink className="navlink" to="/videos">Videos</NavLink>
         <NavLink className="navlink" to="/favorites">Favoriten</NavLink>
+        <NavLink className="navlink" to="/upload">Upload</NavLink>
       </div>
       <div className="bottom">
         <NavLink className="navlink" to="/settings">Einstellungen</NavLink>
+        <NavLink className="navlink" to="/categories">Kategorien</NavLink>
         <NavLink className="navlink" to="/login">Logout</NavLink>
       </div>
     </div>
@@ -117,44 +119,89 @@ function Upload() {
   const [prevFile, setPrev] = useState<File | null>(null);
   const [p1, setP1] = useState(0);
   const [p2, setP2] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [videoPath, setVideoPath] = useState<string>("");
+  const [coverPath, setCoverPath] = useState<string>("");
+  const [previewPath, setPreviewPath] = useState<string>("");
+
+  const [uVideo, setUVideo] = useState<any>(null);
+  const [uCover, setUCover] = useState<any>(null);
+  const [uPrev, setUPrev] = useState<any>(null);
+
+  const startTus = (file: File, onProgress: (pct: number) => void, setPath: (p: string) => void, setUploadRef: (u: any) => void) => {
+    const tus = (window as any).tus || undefined;
+    return new Promise<void>((resolve, reject) => {
+      if (!tus) return reject(new Error("tus not available"));
+      const upload = new tus.Upload(file, {
+        endpoint: `${API}/api/tus`,
+        metadata: { filename: file.name, filetype: file.type },
+        onError: (e: Error) => reject(e),
+        onProgress: (sent: number, total: number) => onProgress(Math.round((sent / total) * 100)),
+        onSuccess: async () => {
+          try {
+            const url = upload.url || "";
+            const r = await fetch(`${API}/api/tus/resolve-path?uploadUrl=${encodeURIComponent(url)}`, { credentials: "include" });
+            const j = await r.json();
+            setPath(j.path);
+            resolve();
+          } catch (e) {
+            reject(e as any);
+          }
+        }
+      });
+      setUploadRef(upload);
+      upload.start();
+    });
+  };
 
   const doUpload = async () => {
     if (!title || !videoFile || !coverFile || !prevFile) return alert("Daten unvollständig");
-
-    const up = async (file: File) => {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch(`${API}/api/tus/upload/${Date.now()}`, {
-        method: "POST",
-        body: file,
-      });
-      if (!r.ok) throw new Error("upload_failed");
-      setP1((x) => Math.min(100, x + 30));
-      return "/tmp/uploaded";
-    };
-
+    setErr(null);
+    setUploading(true);
+    setPaused(false);
     setP1(0); setP2(0);
-    await up(videoFile);
-    await up(coverFile);
-    await up(prevFile);
-    setP1(100);
 
-    const finalize = await fetch(`${API}/api/videos/finalize`, {
-      method: "POST",
-      credentials: "include",
-      body: new URLSearchParams({
-        title,
-        videoPath: "/tmp/video",
-        coverPath: "/tmp/cover",
-        previewPath: "/tmp/preview"
-      })
-    });
-    if (finalize.ok) {
+    try {
+      await startTus(videoFile, (pct) => setP1(Math.min(99, Math.floor(pct * 0.5))), setVideoPath, (u) => setUVideo(u));
+      await startTus(coverFile, (pct) => setP1((prev) => Math.min(99, Math.floor(50 + pct * 0.25))), setCoverPath, (u) => setUCover(u));
+      await startTus(prevFile, (pct) => setP1((prev) => Math.min(99, Math.floor(75 + pct * 0.25))), setPreviewPath, (u) => setUPrev(u));
+      setP1(100);
+
+      const finalize = await fetch(`${API}/api/videos/finalize`, {
+        method: "POST",
+        credentials: "include",
+        body: new URLSearchParams({
+          title,
+          videoPath,
+          coverPath,
+          previewPath
+        })
+      });
+      if (!finalize.ok) throw new Error("Finalisierung fehlgeschlagen");
       setP2(100);
       alert("Upload erfolgreich");
-    } else {
-      alert("Finalisierung fehlgeschlagen");
+    } catch (e: any) {
+      setErr(e?.message || "Fehler beim Upload");
+    } finally {
+      setUploading(false);
     }
+  };
+
+  const pause = () => {
+    setPaused(true);
+    uVideo?.abort?.();
+    uCover?.abort?.();
+    uPrev?.abort?.();
+  };
+
+  const resume = () => {
+    setPaused(false);
+    uVideo?.start?.();
+    uCover?.start?.();
+    uPrev?.start?.();
   };
 
   return (
@@ -165,13 +212,63 @@ function Upload() {
         <div className="row"><input type="file" onChange={(e) => setVideo(e.target.files?.[0] || null)} /></div>
         <div className="row"><input type="file" onChange={(e) => setCover(e.target.files?.[0] || null)} /></div>
         <div className="row"><input type="file" onChange={(e) => setPrev(e.target.files?.[0] || null)} /></div>
-        <button className="btn" onClick={doUpload}>Hochladen</button>
-        <div>Fortschritt 1: {p1}%</div>
-        <div>Fortschritt 2: {p2}%</div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn" onClick={doUpload} disabled={uploading}>Hochladen</button>
+          <button className="btn" onClick={pause} disabled={!uploading || paused}>Pause</button>
+          <button className="btn" onClick={resume} disabled={!uploading || !paused}>Weiter</button>
+        </div>
+        <div>Fortschritt Upload: {p1}%</div>
+        <div>Finalisierung: {p2}%</div>
+        {err ? <div style={{ color: "salmon" }}>{err}</div> : null}
       </div>
     </Layout>
   );
 }
+function Categories() {
+  const [items, setItems] = useState<any[]>([]);
+  const [name, setName] = useState("");
+  const load = () => {
+    fetch(`${API}/api/categories`, { credentials: "include" })
+      .then((r) => r.json())
+      .then(setItems)
+      .catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+  const add = async () => {
+    if (!name) return;
+    await fetch(`${API}/api/categories`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ name }) });
+    setName("");
+    load();
+  };
+  const rename = async (id: number, newName: string) => {
+    await fetch(`${API}/api/categories/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ name: newName }) });
+    load();
+  };
+  const del = async (id: number) => {
+    await fetch(`${API}/api/categories/${id}`, { method: "DELETE", credentials: "include" });
+    load();
+  };
+  return (
+    <Layout>
+      <div className="grid" style={{ maxWidth: 640 }}>
+        <h2>Kategorien</h2>
+        <div className="row">
+          <input className="input" placeholder="Neue Kategorie" value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="btn" onClick={add}>Hinzufügen</button>
+        </div>
+        <div className="grid">
+          {items.map((c: any) => (
+            <div key={c.id} className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input className="input" defaultValue={c.name} onBlur={(e) => rename(c.id, e.target.value)} />
+              <button className="btn" onClick={() => del(c.id)}>Löschen</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 
 function Settings() {
   return (
@@ -190,6 +287,7 @@ export default function App() {
       <Route path="/favorites" element={<Favorites />} />
       <Route path="/upload" element={<Upload />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/categories" element={<Categories />} />
       <Route path="*" element={<Login />} />
     </Routes>
   );

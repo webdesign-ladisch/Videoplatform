@@ -23,4 +23,13 @@ router.post("/commit", (req: Request, res: Response) => {
   res.json({ ok: true, path: metaPath });
 });
 
+router.get("/resolve-path", (req: Request, res: Response) => {
+  const { uploadUrl } = req.query as any;
+  if (!uploadUrl) return res.status(400).json({ error: "missing_uploadUrl" });
+  const id = String(uploadUrl).split("/").pop() || "";
+  const p = path.join(tusDir, id);
+  if (!fs.existsSync(p)) return res.status(404).json({ error: "not_found" });
+  res.json({ path: p });
+});
+
 export default router;
