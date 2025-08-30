@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { pool } from "../db";
-import { requireAuth } from "../middleware/auth";
+import { pool } from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
 import ffmpeg from "fluent-ffmpeg";
-import { env } from "../config/env";
+import { env } from "../config/env.js";
 
 const router = Router();
 const upload = multer({ dest: "/tmp" });

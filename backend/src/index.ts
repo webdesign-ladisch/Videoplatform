@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRoutes from "./routes/auth";
-import videoRoutes from "./routes/videos";
-import storageRoutes from "./routes/storage";
-import tusRoutes from "./routes/tus";
-import { env } from "./config/env";
+import authRoutes from "./routes/auth.js";
+import videoRoutes from "./routes/videos.js";
+import storageRoutes from "./routes/storage.js";
+import tusRoutes from "./routes/tus.js";
+import { env } from "./config/env.js";
 
 const app = express();
 

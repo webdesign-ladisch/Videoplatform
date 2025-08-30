@@ -1,7 +1,7 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import cookie from "cookie";
-import { env } from "../config/env";
+import { env } from "../config/env.js";
 
 const router = Router();
 
