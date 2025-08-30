@@ -1,0 +1,51 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: videoplatform
+      POSTGRES_PASSWORD: videoplatform
+      POSTGRES_DB: videoplatform
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videoplatform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      UPLOAD_ROOT: /uploads
+      NODE_ENV: development
+    volumes:
+      - uploads:/uploads
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE:-http://localhost:4000}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  uploads:
+  pgdata:

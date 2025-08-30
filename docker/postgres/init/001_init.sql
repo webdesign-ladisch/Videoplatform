@@ -1,0 +1,35 @@
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  category_id INT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  UNIQUE(name, category_id)
+);
+
+CREATE TABLE IF NOT EXISTS videos (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  path_video TEXT NOT NULL,
+  path_cover TEXT NOT NULL,
+  path_preview TEXT NOT NULL,
+  duration_sec INT DEFAULT 0,
+  favorite BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS video_tags (
+  video_id INT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (video_id, tag_id)
+);
